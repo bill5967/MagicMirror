@@ -10,6 +10,7 @@ import requests
 import json
 import traceback
 import feedparser
+import datetime
 
 from PIL import Image, ImageTk
 from contextlib import contextmanager
@@ -20,7 +21,7 @@ ui_locale = '' # e.g. 'fr_FR' fro French, '' as default
 time_format = 12 # 12 or 24
 date_format = "%b %d, %Y" # check python doc for strftime() for options
 news_country_code = 'us'
-weather_api_token = '<TOKEN>' # create account at https://darksky.net/dev/
+weather_api_token = '577aa106d3103fb09a06a112ac0c4aa0' # create account at https://darksky.net/dev/
 weather_lang = 'en' # see https://darksky.net/dev/docs/forecast for full list of language parameters values
 weather_unit = 'us' # see https://darksky.net/dev/docs/forecast for full list of unit parameters values
 latitude = None # Set this if IP location lookup does not work for you (must be a string)
@@ -29,6 +30,16 @@ xlarge_text_size = 94
 large_text_size = 48
 medium_text_size = 28
 small_text_size = 18
+xsmall_text_size = 12
+padding_x = 50
+padding_y = 60
+
+
+maps_api_token = 'AIzaSyB3errcMBierCO-bId7J7ugWoltd-Jr7oY'
+maps_origin = '3012+Meadow Lane+Drive+Westlake+OH'
+#maps_origin = '2918+Jefferson+Avenue+Cincinnati+OH'
+# format: address# + address street + address street type + city + state
+maps_destination = '5700+Brecksville+Road+Independence+OH'
 
 @contextmanager
 def setlocale(name): #thread proof function to work with locale
@@ -74,8 +85,10 @@ class Clock(Frame):
         self.dateLbl = Label(self, text=self.date1, font=('Helvetica', small_text_size), fg="white", bg="black")
         self.dateLbl.pack(side=TOP, anchor=E)
         self.tick()
+        self.call_maps()
 
     def tick(self):
+        
         with setlocale(ui_locale):
             if time_format == 12:
                 time2 = time.strftime('%I:%M %p') #hour in 12h format
@@ -98,6 +111,59 @@ class Clock(Frame):
             # to update the time display as needed
             # could use >200 ms, but display gets jerky
             self.timeLbl.after(200, self.tick)
+    def call_maps(self):
+
+        self.after(300000, self.call_maps)
+        now = datetime.datetime.now()
+
+        d_min = datetime.datetime.strptime('06:30','%H:%M')
+        d_max = datetime.datetime.strptime('07:30','%H:%M')
+
+        if(now.time() > d_min.time()):
+            if(now.time() < d_max.time()):
+                self.commute()
+
+    def commute(self):
+        print('Running Commute Routine')
+        now = datetime.datetime.now()
+        print(now.time())
+        self.title = "Commute Time"
+        self.comLbl = Label(self, text=self.title, font=('Helvetica', medium_text_size), fg='white', bg='black')
+        self.comLbl.pack(side=TOP, anchor=N)
+        
+        r = requests.get('https://api.github.com/events')
+        req = requests.get(
+                            'https://maps.googleapis.com/maps/api/distancematrix/json?units=imperial'+
+                            '&origins=' + maps_origin +
+                            '&destinations=' + maps_destination +
+                            '&key=' + maps_api_token +
+                            '&departure_time=now'+
+                            '&traffic_model=pessimistic'
+                            )
+        j = req.json()
+        dump_main = json.dumps([s['elements'] for s in j['rows']], indent = 2)
+
+        load_main = json.loads(dump_main)
+
+        duration = load_main[0][0]['duration']['text']
+        traffic = load_main[0][0]['duration_in_traffic']['text']
+
+        duration_str = json.dumps(duration)
+        traffic_str = json.dumps(traffic)
+        duration_str.replace('""','')
+        
+        duration_str = duration_str.replace('"','')
+        traffic_str = traffic_str.replace('"','')
+
+        self.com1 = 'No Traffic: ' + duration_str
+        self.com2 = 'Traffic:      '  + traffic_str
+        
+        self.comTime1 = Label(self, text=self.com1, font=('Helvetica', small_text_size), fg='white', bg="black")
+        self.comTime1.pack(side=TOP, anchor=N)
+        self.comTime2 = Label(self, text=self.com2, font=('Helvetica', small_text_size), fg='white', bg="black")
+        self.comTime2.pack(side=TOP, anchor=N)
+
+        
 
 
 class Weather(Frame):
@@ -116,7 +182,7 @@ class Weather(Frame):
         self.iconLbl.pack(side=LEFT, anchor=N, padx=20)
         self.currentlyLbl = Label(self, font=('Helvetica', medium_text_size), fg="white", bg="black")
         self.currentlyLbl.pack(side=TOP, anchor=W)
-        self.forecastLbl = Label(self, font=('Helvetica', small_text_size), fg="white", bg="black")
+        self.forecastLbl = Label(self, font=('Helvetica', xsmall_text_size), fg="white", bg="black")
         self.forecastLbl.pack(side=TOP, anchor=W)
         self.locationLbl = Label(self, font=('Helvetica', small_text_size), fg="white", bg="black")
         self.locationLbl.pack(side=TOP, anchor=W)
@@ -216,7 +282,7 @@ class News(Frame):
         self.newsLbl = Label(self, text=self.title, font=('Helvetica', medium_text_size), fg="white", bg="black")
         self.newsLbl.pack(side=TOP, anchor=W)
         self.headlinesContainer = Frame(self, bg="black")
-        self.headlinesContainer.pack(side=TOP)
+        self.headlinesContainer.pack(side=TOP, anchor=W)
         self.get_headlines()
 
     def get_headlines(self):
@@ -243,6 +309,7 @@ class News(Frame):
 
 class NewsHeadline(Frame):
     def __init__(self, parent, event_name=""):
+        
         Frame.__init__(self, parent, bg='black')
 
         image = Image.open("assets/Newspaper.png")
@@ -255,40 +322,14 @@ class NewsHeadline(Frame):
         self.iconLbl.pack(side=LEFT, anchor=N)
 
         self.eventName = event_name
-        self.eventNameLbl = Label(self, text=self.eventName, font=('Helvetica', small_text_size), fg="white", bg="black")
+        self.eventNameLbl = Label(self, text=self.eventName, font=('Helvetica', xsmall_text_size), fg="white", bg="black")
         self.eventNameLbl.pack(side=LEFT, anchor=N)
 
 
-class Calendar(Frame):
+class Commute(Frame):
     def __init__(self, parent, *args, **kwargs):
         Frame.__init__(self, parent, bg='black')
-        self.title = 'Calendar Events'
-        self.calendarLbl = Label(self, text=self.title, font=('Helvetica', medium_text_size), fg="white", bg="black")
-        self.calendarLbl.pack(side=TOP, anchor=E)
-        self.calendarEventContainer = Frame(self, bg='black')
-        self.calendarEventContainer.pack(side=TOP, anchor=E)
-        self.get_events()
-
-    def get_events(self):
-        #TODO: implement this method
-        # reference https://developers.google.com/google-apps/calendar/quickstart/python
-
-        # remove all children
-        for widget in self.calendarEventContainer.winfo_children():
-            widget.destroy()
-
-        calendar_event = CalendarEvent(self.calendarEventContainer)
-        calendar_event.pack(side=TOP, anchor=E)
-        pass
-
-
-class CalendarEvent(Frame):
-    def __init__(self, parent, event_name="Event 1"):
-        Frame.__init__(self, parent, bg='black')
-        self.eventName = event_name
-        self.eventNameLbl = Label(self, text=self.eventName, font=('Helvetica', small_text_size), fg="white", bg="black")
-        self.eventNameLbl.pack(side=TOP, anchor=E)
-
+        
 
 class FullscreenWindow:
 
@@ -297,20 +338,25 @@ class FullscreenWindow:
         self.tk.configure(background='black')
         self.topFrame = Frame(self.tk, background = 'black')
         self.bottomFrame = Frame(self.tk, background = 'black')
+
         self.topFrame.pack(side = TOP, fill=BOTH, expand = YES)
         self.bottomFrame.pack(side = BOTTOM, fill=BOTH, expand = YES)
+        
         self.state = False
         self.tk.bind("<Return>", self.toggle_fullscreen)
         self.tk.bind("<Escape>", self.end_fullscreen)
         # clock
         self.clock = Clock(self.topFrame)
-        self.clock.pack(side=RIGHT, anchor=N, padx=100, pady=60)
+        self.clock.pack(side=RIGHT, anchor=N, padx=padding_x, pady=60)
         # weather
         self.weather = Weather(self.topFrame)
-        self.weather.pack(side=LEFT, anchor=N, padx=100, pady=60)
+        self.weather.pack(side=LEFT, anchor=N, padx=padding_x, pady=60)
         # news
         self.news = News(self.bottomFrame)
-        self.news.pack(side=LEFT, anchor=S, padx=100, pady=60)
+        self.news.pack(side=LEFT, anchor=N, padx=padding_x, pady=60)
+        # commute
+        self.commute=Commute(self.topFrame)
+        self.commute.pack(side=RIGHT, anchor=S, padx=padding_x, pady=60)
         # calender - removing for now
         # self.calender = Calendar(self.bottomFrame)
         # self.calender.pack(side = RIGHT, anchor=S, padx=100, pady=60)
@@ -328,3 +374,4 @@ class FullscreenWindow:
 if __name__ == '__main__':
     w = FullscreenWindow()
     w.tk.mainloop()
+
